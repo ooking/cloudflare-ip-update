@@ -22,12 +22,33 @@
 
 ## 下载与配置
 
+只需下载脚本，无需安装 Git 或克隆仓库。先创建安装目录：
+
 ```bash
-git clone https://github.com/ooking/cloudflare-ip-update.git
-cd cloudflare-ip-update
+sudo mkdir -p /opt/cloudflare-ip-update
 ```
 
-编辑 `cloudflare-ip-update.sh` 顶部配置：
+使用 **curl 或 wget 二选一**下载：
+
+```bash
+# curl
+sudo curl -fL https://raw.githubusercontent.com/ooking/cloudflare-ip-update/main/cloudflare-ip-update.sh -o /opt/cloudflare-ip-update/cloudflare-ip-update.sh
+```
+
+```bash
+# wget
+sudo wget -O /opt/cloudflare-ip-update/cloudflare-ip-update.sh https://raw.githubusercontent.com/ooking/cloudflare-ip-update/main/cloudflare-ip-update.sh
+```
+
+添加执行权限：
+
+```bash
+sudo chmod +x /opt/cloudflare-ip-update/cloudflare-ip-update.sh
+```
+
+即使用 wget 下载，脚本运行时仍需要 curl。重新下载会覆盖脚本中的自定义配置，更新前请先保留这些设置。
+
+编辑 `/opt/cloudflare-ip-update/cloudflare-ip-update.sh` 顶部配置：
 
 ```bash
 DIR="/etc/nginx/snippets"
@@ -63,7 +84,7 @@ NGINX_RESTART_CMD=(systemctl restart nginx)
 在添加新的 `include` 之前运行脚本，避免引用尚不存在的文件：
 
 ```bash
-sudo bash cloudflare-ip-update.sh
+sudo /opt/cloudflare-ip-update/cloudflare-ip-update.sh
 ```
 
 首次生成也会执行配置的检查和重载命令。默认输出：
@@ -150,7 +171,7 @@ if ($is_cloudflare = 0) {
 
 ## 定时更新
 
-可以使用 root 的 crontab 每天更新一次。以下示例假设脚本部署在 `/opt/cloudflare-ip-update`：
+完成首次 Nginx 接入后，使用 root 的 crontab 在服务器时区每天凌晨 04:00 更新。以下示例与上面的安装路径一致：
 
 ```bash
 sudo crontab -e
@@ -160,10 +181,19 @@ sudo crontab -e
 
 ```cron
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-0 4 * * * /bin/bash /opt/cloudflare-ip-update/cloudflare-ip-update.sh >> /var/log/cloudflare-ip-update.log 2>&1
+0 4 * * * /opt/cloudflare-ip-update/cloudflare-ip-update.sh >> /var/log/cloudflare-ip-update.log 2>&1
 ```
 
 请按实际安装位置修改路径，确保配置命令在 cron 环境下可用，并避免多个任务同时运行该脚本。
+
+查看已保存的定时任务和运行日志：
+
+```bash
+sudo crontab -l
+sudo tail -n 50 /var/log/cloudflare-ip-update.log
+```
+
+日志文件会在定时任务首次运行时创建。确保服务器的 cron 服务正在运行；任务以 root 身份执行，条目中无需再写 sudo。
 
 ## 失败处理与注意事项
 

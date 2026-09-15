@@ -22,12 +22,33 @@ Download Cloudflare IPv4 and IPv6 ranges and generate Nginx configuration for re
 
 ## Installation and configuration
 
+Download only the script; Git and a repository clone are not required. Create the installation directory:
+
 ```bash
-git clone https://github.com/ooking/cloudflare-ip-update.git
-cd cloudflare-ip-update
+sudo mkdir -p /opt/cloudflare-ip-update
 ```
 
-Edit the settings near the top of `cloudflare-ip-update.sh`:
+Download using **either curl or wget**:
+
+```bash
+# curl
+sudo curl -fL https://raw.githubusercontent.com/ooking/cloudflare-ip-update/main/cloudflare-ip-update.sh -o /opt/cloudflare-ip-update/cloudflare-ip-update.sh
+```
+
+```bash
+# wget
+sudo wget -O /opt/cloudflare-ip-update/cloudflare-ip-update.sh https://raw.githubusercontent.com/ooking/cloudflare-ip-update/main/cloudflare-ip-update.sh
+```
+
+Make the script executable:
+
+```bash
+sudo chmod +x /opt/cloudflare-ip-update/cloudflare-ip-update.sh
+```
+
+The script still requires curl at runtime even if downloaded with wget. Downloading again overwrites custom settings in the script; preserve them before updating.
+
+Edit the settings near the top of `/opt/cloudflare-ip-update/cloudflare-ip-update.sh`:
 
 ```bash
 DIR="/etc/nginx/snippets"
@@ -63,7 +84,7 @@ These settings are edited in the script; they are not environment variable overr
 Run the script before adding new includes so that Nginx does not reference missing files:
 
 ```bash
-sudo bash cloudflare-ip-update.sh
+sudo /opt/cloudflare-ip-update/cloudflare-ip-update.sh
 ```
 
 The initial run also executes the configured validation and reload commands. Default output paths:
@@ -155,7 +176,7 @@ Coordinate the include locations and generated file format before validation and
 
 ## Scheduled updates
 
-To update daily using root's crontab, assuming the script is installed in `/opt/cloudflare-ip-update`:
+After completing the initial Nginx setup, schedule an update every day at 04:00 in the server's timezone. This example uses the installation path above and root's crontab:
 
 ```bash
 sudo crontab -e
@@ -165,10 +186,19 @@ Add:
 
 ```cron
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-0 4 * * * /bin/bash /opt/cloudflare-ip-update/cloudflare-ip-update.sh >> /var/log/cloudflare-ip-update.log 2>&1
+0 4 * * * /opt/cloudflare-ip-update/cloudflare-ip-update.sh >> /var/log/cloudflare-ip-update.log 2>&1
 ```
 
 Adjust the installation path, ensure configured commands are available in the cron environment, and avoid overlapping script runs.
+
+View the saved schedule and execution log:
+
+```bash
+sudo crontab -l
+sudo tail -n 50 /var/log/cloudflare-ip-update.log
+```
+
+The log file is created when the scheduled task first runs. Ensure the server's cron service is running. The task runs as root, so no sudo is needed inside the crontab entry.
 
 ## Failure handling and operational notes
 
