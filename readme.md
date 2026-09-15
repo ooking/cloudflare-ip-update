@@ -93,6 +93,7 @@ The initial run also executes the configured validation and reload commands. Def
 /etc/nginx/snippets/cloudflare_realip.conf
 /etc/nginx/snippets/cloudflare_allow.conf
 /etc/nginx/snippets/cloudflare_guard.conf
+/etc/nginx/snippets/cloudflare_custom.conf
 ```
 
 ### 2. Include the configuration
@@ -130,7 +131,7 @@ After manually editing site configuration, run the appropriate validation and re
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Rerunning the script does not apply site configuration changes when all three generated files are unchanged: it exits without reloading.
+Rerunning the script does not apply site configuration changes when all three generated files are unchanged and the custom file already exists: it exits without reloading.
 
 ## How the files work together
 
@@ -155,6 +156,8 @@ geo $realip_remote_addr $is_cloudflare {
 if ($is_cloudflare = 0) {
     return 403;
 }
+
+include "/etc/nginx/snippets/cloudflare_custom.conf";
 ```
 
 This setup assumes **Cloudflare connects directly to this Nginx instance**. An additional load balancer or proxy requires configuration tailored to that proxy chain. Protected sites must be accessed through Cloudflare's proxy; direct origin requests receive HTTP 403.
@@ -173,6 +176,34 @@ Run the updated script to generate `cloudflare_guard.conf`, replace the inline `
 4. Run the updated script to generate the new format and validate/reload Nginx.
 
 Coordinate the include locations and generated file format before validation and reload; the old and new formats cannot use the same include context.
+
+## Custom rules
+
+The guard includes a fixed filename, `cloudflare_custom.conf`, in the same directory. The default path is `/etc/nginx/snippets/cloudflare_custom.conf`; the include path follows `DIR`.
+
+- If missing, the script creates the file with an introductory comment. Existing contents are never modified.
+- This file is excluded from replacement and rollback. Existing rules and a newly created custom file are retained even if validation fails.
+- Creating a missing custom file triggers validation and reload even when the other three files are unchanged.
+- Custom rules run after the Cloudflare source check and apply to every server that includes the guard.
+- Write rules valid in the `server` context. Do not wrap them in a `server` block or add HTTP-only directives such as `geo` or `map`.
+
+For example, add this to `cloudflare_custom.conf` to block a visitor IP:
+
+```nginx
+if ($remote_addr = 203.0.113.10) {
+    return 403;
+}
+```
+
+Replace the example address with the IP to block. Use `$remote_addr`, which realip restores to the visitor IP. `$realip_remote_addr` identifies the Cloudflare node connecting to the origin and should not be used to block an individual visitor.
+
+After editing custom rules, manually validate and reload using your configured commands. With the defaults:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The updater does not track changes to existing custom file contents, so scheduled updates do not automatically apply manual edits. Edit the custom file; changes written directly into the generated guard will still be overwritten.
 
 ## Scheduled updates
 

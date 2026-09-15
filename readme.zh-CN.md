@@ -93,6 +93,7 @@ sudo /opt/cloudflare-ip-update/cloudflare-ip-update.sh
 /etc/nginx/snippets/cloudflare_realip.conf
 /etc/nginx/snippets/cloudflare_allow.conf
 /etc/nginx/snippets/cloudflare_guard.conf
+/etc/nginx/snippets/cloudflare_custom.conf
 ```
 
 ### 2. 引入配置
@@ -129,7 +130,7 @@ http {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-不能依赖再次运行脚本来应用站点配置修改：如果三个生成文件没有变化，脚本会直接退出。
+不能依赖再次运行脚本来应用站点配置修改：如果三个生成文件没有变化且自定义文件已存在，脚本会直接退出。
 
 ## 三个文件如何配合
 
@@ -154,6 +155,8 @@ geo $realip_remote_addr $is_cloudflare {
 if ($is_cloudflare = 0) {
     return 403;
 }
+
+include "/etc/nginx/snippets/cloudflare_custom.conf";
 ```
 
 如果已有内联的上述 `if`，先运行新版脚本生成 guard 文件，再用 guard 的 `include` 替换内联规则，最后手动检查并重载 Nginx。
@@ -168,6 +171,34 @@ if ($is_cloudflare = 0) {
 4. 运行更新脚本生成新格式，并完成 Nginx 配置检查和重载。
 
 迁移过程中应先协调好引用位置和生成文件格式，再执行检查和重载；旧格式文件与新格式的引入位置不能混用。
+
+## 自定义规则
+
+脚本会让 guard 引入同一目录下固定名称的 `cloudflare_custom.conf`，默认路径为 `/etc/nginx/snippets/cloudflare_custom.conf`。修改 `DIR` 时，引入路径会同步变化。
+
+- 文件不存在时，脚本创建一个仅含说明注释的文件；文件已存在时，不修改其内容。
+- 此文件不参与覆盖或回滚；即使配置检查失败，也会保留自定义内容和首次创建的文件。
+- 缺失文件被创建后，会触发本次配置检查和重载，即使另外三个文件没有变化。
+- 自定义规则在 Cloudflare 来源检查之后执行，对所有引入 guard 的 `server` 生效。
+- 文件按 `server` 上下文编写，不要包裹 `server` 块，也不能放入仅允许在 `http` 中使用的 `geo` / `map` 指令。
+
+例如，禁止一个访客 IP，在 `cloudflare_custom.conf` 中添加：
+
+```nginx
+if ($remote_addr = 203.0.113.10) {
+    return 403;
+}
+```
+
+将示例地址替换为要封禁的 IP。这里使用 realip 还原后的 `$remote_addr` 判断访客；`$realip_remote_addr` 是连接源站的 Cloudflare 节点 IP，不适合用于封禁单个访客。
+
+修改自定义文件后，手动检查并重载（自定义安装请使用对应命令）：
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+脚本不会检测已有自定义文件的内容变化，不能依赖定时更新自动应用手动修改。请编辑 custom 文件，直接写入 guard 的内容仍会被后续更新覆盖。
 
 ## 定时更新
 

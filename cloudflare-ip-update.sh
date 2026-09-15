@@ -11,6 +11,7 @@ NGINX_RESTART_CMD=(systemctl reload nginx)
 REALIP_FILE="$DIR/cloudflare_realip.conf"
 ALLOW_FILE="$DIR/cloudflare_allow.conf"
 GUARD_FILE="$DIR/cloudflare_guard.conf"
+CUSTOM_FILE="$DIR/cloudflare_custom.conf"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -101,6 +102,24 @@ if ($is_cloudflare = 0) {
 }
 EOF
 
+printf '\ninclude "%s";\n' "$CUSTOM_FILE" >> "$NEW_GUARD"
+
+# Custom rules belong to the user and are never overwritten or rolled back.
+CUSTOM_CREATED=0
+if [[ ! -e "$CUSTOM_FILE" && ! -L "$CUSTOM_FILE" ]]; then
+    if (set -o noclobber; printf '# Custom server-level rules. This file is preserved by the updater.\n' > "$CUSTOM_FILE"); then
+        CUSTOM_CREATED=1
+    elif [[ ! -f "$CUSTOM_FILE" ]]; then
+        echo "ERROR: Could not create custom configuration: $CUSTOM_FILE"
+        exit 1
+    fi
+fi
+
+if [[ ! -f "$CUSTOM_FILE" || ! -r "$CUSTOM_FILE" ]]; then
+    echo "ERROR: Custom configuration must be a readable file: $CUSTOM_FILE"
+    exit 1
+fi
+
 REALIP_CHANGED=1
 ALLOW_CHANGED=1
 GUARD_CHANGED=1
@@ -117,7 +136,7 @@ if [[ -f "$GUARD_FILE" ]] && cmp -s "$NEW_GUARD" "$GUARD_FILE"; then
     GUARD_CHANGED=0
 fi
 
-if [[ "$REALIP_CHANGED" -eq 0 && "$ALLOW_CHANGED" -eq 0 && "$GUARD_CHANGED" -eq 0 ]]; then
+if [[ "$REALIP_CHANGED" -eq 0 && "$ALLOW_CHANGED" -eq 0 && "$GUARD_CHANGED" -eq 0 && "$CUSTOM_CREATED" -eq 0 ]]; then
     echo "Cloudflare configuration unchanged."
     exit 0
 fi
